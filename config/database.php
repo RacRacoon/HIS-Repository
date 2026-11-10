@@ -1,10 +1,17 @@
 <?php
 declare(strict_types=1);
 
-$host = getenv('CAREFLOW_DB_HOST') ?: '127.0.0.1';
-$db = getenv('CAREFLOW_DB_NAME') ?: 'hospital_system';
-$user = getenv('CAREFLOW_DB_USER') ?: 'root';
-$pass = getenv('CAREFLOW_DB_PASS') ?: '';
+// Optional per-server settings (hosting credentials). See database.local.example.php.
+$localConfig = [];
+if (is_file(__DIR__ . '/database.local.php')) {
+    $loaded = require __DIR__ . '/database.local.php';
+    if (is_array($loaded)) $localConfig = $loaded;
+}
+
+$host = getenv('CAREFLOW_DB_HOST') ?: ($localConfig['host'] ?? '127.0.0.1');
+$db = getenv('CAREFLOW_DB_NAME') ?: ($localConfig['name'] ?? 'hospital_system');
+$user = getenv('CAREFLOW_DB_USER') ?: ($localConfig['user'] ?? 'root');
+$pass = getenv('CAREFLOW_DB_PASS') ?: ($localConfig['pass'] ?? '');
 $charset = 'utf8mb4';
 $options = [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -17,11 +24,13 @@ try {
     // custom 3307 and default 3306. The first reachable port wins.
     $candidatePorts = [];
     $configuredPort = getenv('CAREFLOW_DB_PORT');
+    if ($configuredPort === false && isset($localConfig['port'])) $configuredPort = (string)$localConfig['port'];
     if ($configuredPort !== false && ctype_digit((string)$configuredPort)) {
+        // An explicit port (env or database.local.php) is used alone, so remote
+        // hosts are not probed on ports that will only time out.
         $candidatePorts[] = (int)$configuredPort;
-    }
-    foreach ([3307, 3306] as $fallbackPort) {
-        if (!in_array($fallbackPort, $candidatePorts, true)) $candidatePorts[] = $fallbackPort;
+    } else {
+        $candidatePorts = [3307, 3306];
     }
 
     $lastException = null;
